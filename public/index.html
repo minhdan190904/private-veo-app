@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Veo Vertex AI Video Generator</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Vertex AI · Veo</p>
+          <h1>Tạo video bằng prompt hoặc ảnh</h1>
+          <p class="subtitle">
+            Web Node.js dùng service account JSON ở backend, xuất video ra Cloud Storage rồi phát bằng signed URL.
+          </p>
+        </div>
+        <div class="status-pill" id="configStatus">Đang đọc cấu hình...</div>
+      </section>
+
+      <section class="grid">
+        <form id="generateForm" class="card form-card">
+          <div class="two-cols">
+            <label>
+              Chế độ tạo video
+              <select id="generationMode">
+                <option value="text">Prompt to Video</option>
+                <option value="image">Image to Video</option>
+              </select>
+            </label>
+
+            <label>
+              Public API Key (chỉ cần cho Image to Video)
+              <input id="apiKey" placeholder="Nhập PUBLIC_API_KEY nếu gọi public API" />
+            </label>
+          </div>
+
+          <label>
+            Prompt
+            <textarea
+              id="prompt"
+              rows="7"
+              placeholder="Ví dụ: A cinematic vertical video of a futuristic city at sunset, smooth camera movement, ultra realistic, no text, no watermark"
+              required
+            ></textarea>
+          </label>
+
+          <div class="two-cols">
+            <label>
+              Model
+              <select id="model">
+                <option value="veo-3.1-fast-generate-001">Veo 3.1 Fast</option>
+                <option value="veo-3.1-generate-001">Veo 3.1 Quality</option>
+                <option value="veo-3.0-fast-generate-001">Veo 3.0 Fast</option>
+                <option value="veo-3.0-generate-001">Veo 3.0 Quality</option>
+                <option value="veo-2.0-generate-001">Veo 2</option>
+              </select>
+            </label>
+
+            <label>
+              Tỉ lệ khung hình
+              <select id="aspectRatio">
+                <option value="9:16">9:16 dọc / TikTok</option>
+                <option value="16:9">16:9 ngang / YouTube</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="three-cols">
+            <label>
+              Số giây
+              <select id="durationSeconds">
+                <option value="4">4 giây</option>
+                <option value="6">6 giây</option>
+                <option value="8">8 giây</option>
+              </select>
+            </label>
+
+            <label>
+              Số video
+              <select id="sampleCount">
+                <option value="1">x1</option>
+                <option value="2">x2</option>
+                <option value="3">x3</option>
+                <option value="4">x4</option>
+              </select>
+            </label>
+
+            <label>
+              Resolution
+              <select id="resolution">
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+              </select>
+            </label>
+          </div>
+
+          <label>
+            Negative prompt
+            <input
+              id="negativePrompt"
+              value="low quality, blurry, distorted, watermark, logo, text, bad anatomy, glitch"
+            />
+          </label>
+
+          <section id="imageOptions" class="image-options hidden">
+            <label>
+              Ảnh đầu vào
+              <input id="imageFile" type="file" accept="image/jpeg,image/png" />
+            </label>
+
+            <div class="two-cols">
+              <label>
+                Resize mode
+                <select id="resizeMode">
+                  <option value="crop">crop</option>
+                  <option value="pad">pad</option>
+                </select>
+              </label>
+
+              <label>
+                MIME type (fallback)
+                <select id="mimeType">
+                  <option value="image/jpeg">image/jpeg</option>
+                  <option value="image/png">image/png</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <div class="two-cols">
+            <label>
+              Người trong video
+              <select id="personGeneration">
+                <option value="allow_adult">Cho phép người lớn</option>
+                <option value="disallow">Không tạo người/face</option>
+              </select>
+            </label>
+
+            <label class="checkbox-row">
+              <input id="generateAudio" type="checkbox" />
+              <span>Tạo audio kèm video</span>
+            </label>
+          </div>
+
+          <button id="generateButton" type="submit">Generate video</button>
+
+          <p class="hint">
+            Mẹo tiết kiệm credit: dùng Veo 3.1 Fast, 4 giây, 720p, x1, tắt audio.
+          </p>
+        </form>
+
+        <section class="card result-card">
+          <h2>Kết quả</h2>
+
+          <div id="progress" class="progress hidden">
+            <div class="spinner"></div>
+            <div>
+              <strong id="progressTitle">Đang xử lý...</strong>
+              <p id="progressText">Đang gửi request tới Vertex AI.</p>
+            </div>
+          </div>
+
+          <div id="errorBox" class="error hidden"></div>
+
+          <div class="operation-box hidden" id="operationBox">
+            <span>Operation</span>
+            <code id="operationName"></code>
+          </div>
+
+          <div id="videos" class="videos"></div>
+
+          <details class="raw-box">
+            <summary>Raw response</summary>
+            <pre id="rawResponse">{}</pre>
+          </details>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

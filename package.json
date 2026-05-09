@@ -1,0 +1,23 @@
+{
+  "name": "veo-node-web",
+  "version": "1.0.0",
+  "description": "Node.js web UI for generating Veo videos on Vertex AI",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.16.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "google-auth-library": "^9.15.0",
+    "multer": "^2.1.1",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
