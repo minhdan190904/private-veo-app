@@ -1,185 +1,233 @@
-# Veo Node Web UI
+# Veo Backend (Node.js + Web UI)
 
-Web Node.js + UI để tạo video bằng Vertex AI Veo.
+Backend Node.js để tạo video bằng Vertex AI Veo, có sẵn UI web và public API cho mobile.
 
-## 1. Cài đặt
+## 1. Yêu cầu
+
+- Node.js >= 18
+- npm >= 9
+- Google Cloud project đã bật billing
+- Đã bật API:
+  - Vertex AI API
+  - Cloud Storage API
+
+## 2. Biến môi trường (`.env`)
+
+Dự án hiện tại đọc các biến sau từ `server.js`:
+
+```env
+# Bắt buộc
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
+BUCKET_NAME=your-output-bucket-name
+PUBLIC_API_KEY=your-very-strong-api-key
+
+# Tuỳ chọn
+PORT=3000
+GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
+
+# Alias tương thích cũ (không bắt buộc nếu đã có GOOGLE_CLOUD_*):
+# PROJECT_ID=your-gcp-project-id
+# REGION=us-central1
+```
+
+Lưu ý:
+- `BUCKET_NAME` chỉ là tên bucket, không có `gs://`.
+- Nếu không set `GOOGLE_APPLICATION_CREDENTIALS`, app mặc định dùng `./service-account.json`.
+- Nếu thiếu `PUBLIC_API_KEY`, các endpoint public sẽ trả `503`.
+
+## 3. Chạy local
+
+1. Cài dependency:
 
 ```bash
 npm install
-cp .env.example .env
 ```
 
-Đặt file service account JSON vào folder này và đổi tên thành:
+2. Tạo file `.env` theo mẫu ở trên.
+
+3. Đặt file key vào root dự án:
 
 ```txt
 service-account.json
 ```
 
-Hoặc sửa biến này trong `.env`:
-
-```env
-GOOGLE_APPLICATION_CREDENTIALS=./duong-dan-file-json-cua-ban.json
-```
-
-## 2. Sửa `.env`
-
-```env
-GOOGLE_CLOUD_PROJECT=foranhdan
-GOOGLE_CLOUD_LOCATION=us-central1
-BUCKET_NAME=your-veo-output-bucket
-GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
-PORT=3000
-```
-
-`BUCKET_NAME` chỉ ghi tên bucket, ví dụ:
-
-```env
-BUCKET_NAME=foranhdan-veo-output
-```
-
-Không ghi `gs://`.
-
-## 3. Quyền service account cần có
-
-Trong Google Cloud Console, service account cần tối thiểu:
-
-- Vertex AI User
-- Storage Object Admin
-
-Nếu signed URL bị lỗi quyền ký, thêm:
-
-- Service Account Token Creator
-
-## 4. API cần bật
-
-- Vertex AI API
-- Cloud Storage API
-
-## 5. Chạy
+4. Chạy app:
 
 ```bash
 npm start
 ```
 
-Mở:
+5. Mở:
+- UI: `http://localhost:3000`
+- Swagger: `http://localhost:3000/docs`
+- OpenAPI JSON: `http://localhost:3000/openapi.json`
 
-```txt
-http://localhost:3000
+## 4. IAM tối thiểu cho service account
+
+Service account dùng để gọi Vertex và ký signed URL từ GCS nên cần tối thiểu:
+
+- `roles/aiplatform.user` (Vertex AI User)
+- `roles/storage.objectAdmin` (Storage Object Admin)
+- `roles/iam.serviceAccountTokenCreator` (để ký URL nếu cần)
+
+## 5. Endpoint chính
+
+- Private (UI/backend nội bộ):
+  - `POST /api/generate`
+  - `POST /api/status`
+- Public (bảo vệ bằng `x-api-key`):
+  - `POST /api/public/video/create`
+  - `POST /api/public/video/status`
+  - `POST /api/public/video/create-from-image` (hỗ trợ JSON + multipart)
+
+## 6. Deploy lên Google Cloud (khuyên dùng Cloud Run)
+
+### 6.1. Chuẩn bị
+
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
 ```
 
-## 6. Lưu ý bảo mật
+Tạo secret cho key JSON (an toàn hơn commit file):
 
-Không đưa `service-account.json` vào Flutter, frontend, GitHub hoặc thư mục `public`.
-File JSON chỉ nằm ở backend Node.js.
-## 7. Public API cho Android
-
-Them key trong `.env`:
-
-```env
-PUBLIC_API_KEY=your-secret-key
+```bash
+gcloud secrets create veo-sa-key --replication-policy=automatic
+cat service-account.json | gcloud secrets versions add veo-sa-key --data-file=-
 ```
 
-Tao video:
+### 6.2. Deploy Cloud Run từ source
 
-```http
-POST /api/public/video/create
-Content-Type: application/json
-x-api-key: your-secret-key
+```bash
+gcloud run deploy veo-backend \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,BUCKET_NAME=YOUR_BUCKET,PUBLIC_API_KEY=YOUR_API_KEY,GOOGLE_APPLICATION_CREDENTIALS=/secrets/veo/service-account.json \
+  --update-secrets /secrets/veo/service-account.json=veo-sa-key:latest
 ```
 
-Body mau:
+Sau deploy, Cloud Run sẽ trả URL service. Kiểm tra nhanh:
 
-```json
-{
-  "prompt": "A cinematic drone shot of Da Nang beach at sunrise",
-  "model": "veo-3.1-fast-generate-001",
-  "aspectRatio": "9:16",
-  "durationSeconds": 4,
-  "sampleCount": 1,
-  "resolution": "720p",
-  "generateAudio": false
+```bash
+curl https://YOUR_CLOUD_RUN_URL/api/config
+```
+
+Gợi ý production:
+- Đổi `--allow-unauthenticated` sang private nếu chỉ gọi nội bộ.
+- Không để `PUBLIC_API_KEY` yếu; nên xoay vòng key định kỳ.
+
+## 7. Deploy Google Cloud bằng Compute Engine VM (nếu cần VPS trong GCP)
+
+1. Tạo VM Ubuntu.
+2. SSH vào VM và cài Node + Nginx + PM2.
+3. Clone repo, tạo `.env`, copy `service-account.json`.
+4. Chạy app bằng PM2:
+
+```bash
+npm install
+pm2 start server.js --name veo-backend
+pm2 save
+pm2 startup
+```
+
+5. Cấu hình Nginx reverse proxy `:80 -> :3000`.
+6. Mở firewall cho `80/443`.
+7. Cài SSL bằng Certbot.
+
+## 8. Deploy lên VPS (Ubuntu, ngoài GCP)
+
+### 8.1. Cài runtime
+
+```bash
+sudo apt update
+sudo apt install -y nginx
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm i -g pm2
+```
+
+### 8.2. Chạy app
+
+```bash
+git clone <repo-url> veo-backend
+cd veo-backend
+npm install
+```
+
+Tạo `.env` và `service-account.json` trong root, rồi:
+
+```bash
+pm2 start server.js --name veo-backend
+pm2 save
+pm2 startup
+```
+
+### 8.3. Nginx reverse proxy
+
+Tạo file `/etc/nginx/sites-available/veo-backend`:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
 }
 ```
 
-Kiem tra trang thai:
+Bật site:
 
-```http
-POST /api/public/video/status
-Content-Type: application/json
-x-api-key: your-secret-key
+```bash
+sudo ln -s /etc/nginx/sites-available/veo-backend /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-```json
-{
-  "model": "veo-3.1-fast-generate-001",
-  "operationName": "projects/.../locations/.../publishers/google/models/.../operations/..."
-}
+### 8.4. SSL
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d your-domain.com
 ```
 
-## 8. Swagger
+## 9. Kiểm tra sau deploy
 
-Sau khi chay server, mo:
+- Health/config:
 
-```txt
-http://localhost:3000/docs
+```bash
+curl https://your-domain-or-url/api/config
 ```
 
-File OpenAPI JSON:
+- Test public API:
 
-```txt
-http://localhost:3000/openapi.json
+```bash
+curl -X POST https://your-domain-or-url/api/public/video/create \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -d '{
+    "prompt": "A cinematic drone shot of Da Nang beach at sunrise",
+    "model": "veo-3.1-fast-generate-001",
+    "aspectRatio": "9:16",
+    "durationSeconds": 4,
+    "sampleCount": 1,
+    "resolution": "720p",
+    "generateAudio": false
+  }'
 ```
 
-Trong Swagger UI, bam `Authorize` va nhap gia tri `x-api-key` = `PUBLIC_API_KEY`.
+## 10. Bảo mật
 
-## 9. Image to Video API
-
-Endpoint:
-
-```http
-POST /api/public/video/create-from-image
-```
-
-Headers:
-
-```http
-x-api-key: <PUBLIC_API_KEY>
-Content-Type: application/json
-```
-
-Body example:
-
-```json
-{
-  "prompt": "A gentle camera move as the person smiles and wind moves hair",
-  "imageBase64": "<base64-image-no-data-uri>",
-  "mimeType": "image/jpeg",
-  "resizeMode": "crop",
-  "model": "veo-3.1-fast-generate-001",
-  "aspectRatio": "9:16",
-  "durationSeconds": 4,
-  "sampleCount": 1,
-  "resolution": "720p",
-  "generateAudio": false
-}
-```
-
-Luu y:
-- `imageBase64` chi gui bytes base64, khong gui prefix `data:image/...;base64,`.
-- `mimeType` ho tro: `image/jpeg`, `image/png`.
-- `resizeMode`: `crop` hoac `pad`.
-
-## 10. Multipart Image Upload (Android)
-
-`/api/public/video/create-from-image` da ho tro `multipart/form-data`.
-
-Field file:
-- `imageFile`: file anh jpeg/png
-
-Field text:
-- `prompt` (bat buoc)
-- `model`, `aspectRatio`, `durationSeconds`, `sampleCount`, `resolution`
-- `generateAudio`, `negativePrompt`, `personGeneration`, `resizeMode`
-- `mimeType` (co the bo qua neu gui `imageFile`)
-
-Server se tu dong doi `imageFile` sang base64 roi gui len Vertex AI.
+- Không commit `.env` và `service-account.json`.
+- Không đặt key JSON trong `public/` hoặc frontend/mobile app.
+- Dùng Secret Manager (Cloud Run) hoặc secret manager của VPS/platform.
+- Giới hạn CORS theo domain thật nếu đưa vào production.
